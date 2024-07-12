@@ -1,0 +1,60 @@
+---
+- name: "Prepare EC2 instance and start webimage"
+  become: true
+  hosts: [ec2_instances]
+  vars: 
+    DOCKER_USERNAME: !vault |
+              $ANSIBLE_VAULT;1.1;AES256
+              32306430393035396138343363313137303638326237643065656334653533366262353263386435
+              3765666366366333636131323631636535313564303764630a316333303234656339363763363132
+              64643066346231303931613539636434323430373537356465623932613661393235363662376234
+              6639653735653438610a663763346364633538643637333336393331313264613538646263306366
+              33373864306631653532363662383034323666646433663138616436353832376662
+    DOCKERHUB_PASSWORD: !vault |
+              $ANSIBLE_VAULT;1.1;AES256
+              32396136656263613663376662333566393532373162636132616163656137396331643739663639
+              3039613233336330316461393938653839653766636464360a626536353765623865646539386133
+              36646633663764303438383937613131343463343538643066636130356336366364313333363339
+              6131316139643965660a353330363035613565313139333165383866616461636465626436643438
+              3435
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+
+    - name: Log into DockerHub
+      docker_login:
+        username: "{{ DOCKER_USERNAME }}"
+        password: "{{ DOCKERHUB_PASSWORD }}"
+    
+    - name: Get running containers
+      docker_host_info:
+        containers: yes
+      register: docker_info
+
+    - name: Stop running containers
+      docker_container:
+        name: "{{ item }}"
+        state: stopped
+      loop: "{{ docker_info.containers | map(attribute='Id') | list }}"
+
+    - name: Clear system of docker
+      shell: |
+        docker system prune -af
+
+    - name: Pull and Run latest webpage image
+      docker_container:
+        name: diplomatask
+        image: kirilljbee/diplomatask:latest
+        state: started
+        ports:
+          - "5000:80"
+        
+
